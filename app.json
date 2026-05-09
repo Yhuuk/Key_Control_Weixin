@@ -4,10 +4,5 @@
   ],
   "window": {
     "navigationBarTitleText": "蓝牙控制"
-  },
-  "permission": {
-    "scope.bluetooth": {
-      "desc": "用于连接附近的ESP32蓝牙设备"
-    }
   }
 }
