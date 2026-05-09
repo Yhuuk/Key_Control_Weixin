@@ -1,0 +1,21 @@
+<view class="page">
+  <view class="title">请输入密码</view>
+
+  <view class="status">{{status}}</view>
+
+  <view class="password-box">
+    {{maskedPassword}}
+  </view>
+
+  <view class="keyboard">
+    <block wx:for="{{keys}}" wx:key="index">
+      <button class="key" bindtap="onKeyTap" data-key="{{item}}">
+        {{item}}
+      </button>
+    </block>
+
+    <button class="key delete" bindtap="onDelete">Delete</button>
+    <button class="key" bindtap="onKeyTap" data-key="0">0</button>
+    <button class="key confirm" bindtap="onConfirm">确认</button>
+  </view>
+</view>

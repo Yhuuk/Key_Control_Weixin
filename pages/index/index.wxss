@@ -1,0 +1,47 @@
+.page {
+  padding: 40rpx;
+}
+
+.title {
+  font-size: 44rpx;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 30rpx;
+}
+
+.status {
+  text-align: center;
+  color: #666;
+  margin-bottom: 30rpx;
+  min-height: 40rpx;
+}
+
+.password-box {
+  height: 100rpx;
+  line-height: 100rpx;
+  text-align: center;
+  font-size: 48rpx;
+  border: 2rpx solid #ddd;
+  border-radius: 20rpx;
+  margin-bottom: 40rpx;
+}
+
+.keyboard {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20rpx;
+}
+
+.key {
+  height: 100rpx;
+  font-size: 36rpx;
+  border-radius: 18rpx;
+}
+
+.delete {
+  background-color: #f5d6d6;
+}
+
+.confirm {
+  background-color: #b8e6c1;
+}
