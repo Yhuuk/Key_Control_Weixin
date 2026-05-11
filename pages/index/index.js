@@ -11,7 +11,7 @@ Page({
     password: "",
     maskedPassword: "",
 
-    status: "页面已加载，准备初始化蓝牙",
+    status: "正在准备蓝牙连接...",
 
     deviceId: "",
     serviceId: "",
@@ -21,15 +21,23 @@ Page({
   },
 
   onLoad() {
-    this.initBluetooth();
+    this._retryTimer = null;
+    this._connecting = false;
+    this._isDiscovering = false;
+    this._bluetoothOpened = false;
+
+    this.bindBluetoothEvents();
+    this.startAutoConnect();
   },
 
   onUnload() {
+    this.stopAutoConnect();
     this.closeBluetooth();
   },
 
   onKeyTap(e) {
     const key = e.currentTarget.dataset.key;
+
     const password = this.data.password + key;
 
     this.setData({
@@ -57,7 +65,7 @@ Page({
       this.setData({
         password: "",
         maskedPassword: "",
-        status: "密码错误"
+        status: this.data.connected ? "蓝牙已连接，可以输入密码" : "密码错误，正在等待蓝牙连接..."
       });
 
       return;
@@ -70,75 +78,212 @@ Page({
       });
 
       this.setData({
-        status: "密码正确，但蓝牙未连接"
+        status: "密码正确，但蓝牙还没连接，正在继续重试..."
       });
 
+      this.tryConnectOnce();
       return;
     }
 
     this.sendCommand("OPEN");
   },
 
-  initBluetooth() {
-    this.setData({
-      status: "正在初始化蓝牙..."
-    });
+  /**
+   * 开始自动连接流程
+   * 每隔 3 秒检查一次：
+   * 1. 手机蓝牙是否可用
+   * 2. 是否正在扫描 ESP32
+   * 3. 是否需要重新连接
+   */
+  startAutoConnect() {
+    this.stopAutoConnect();
 
+    this.tryConnectOnce();
+
+    this._retryTimer = setInterval(() => {
+      if (this.data.connected) {
+        return;
+      }
+
+      if (this._connecting) {
+        return;
+      }
+
+      this.tryConnectOnce();
+    }, 3000);
+  },
+
+  stopAutoConnect() {
+    if (this._retryTimer) {
+      clearInterval(this._retryTimer);
+      this._retryTimer = null;
+    }
+  },
+
+  /**
+   * 单次连接尝试
+   * 这个函数会被定时调用。
+   */
+  tryConnectOnce() {
+    if (this.data.connected || this._connecting) {
+      return;
+    }
+
+    this.openBluetoothAndSearch();
+  },
+
+  /**
+   * 打开微信小程序蓝牙适配器
+   * 如果手机蓝牙没开，这里会失败，然后等待下次重试。
+   */
+  openBluetoothAndSearch() {
     wx.openBluetoothAdapter({
       mode: "central",
 
       success: () => {
-        console.log("蓝牙初始化成功");
+        this._bluetoothOpened = true;
 
-        this.setData({
-          status: "蓝牙初始化成功，正在搜索 ESP32..."
+        wx.getBluetoothAdapterState({
+          success: (res) => {
+            console.log("蓝牙适配器状态：", res);
+
+            if (!res.available) {
+              this.setData({
+                status: "手机蓝牙未开启，请打开手机蓝牙，打开后会自动连接"
+              });
+              return;
+            }
+
+            this.setData({
+              status: "手机蓝牙已开启，正在搜索 ESP32..."
+            });
+
+            this.startDiscovery();
+          },
+
+          fail: (err) => {
+            console.error("获取蓝牙状态失败：", err);
+
+            this.setData({
+              status: "正在重新检测手机蓝牙..."
+            });
+          }
         });
-
-        this.listenConnectionState();
-        this.listenDeviceFound();
-        this.startDiscovery();
       },
 
       fail: (err) => {
-        console.error("蓝牙初始化失败", err);
+        console.error("打开蓝牙适配器失败：", err);
+
+        this._bluetoothOpened = false;
+        this._isDiscovering = false;
 
         this.setData({
-          status: "蓝牙初始化失败，请打开手机蓝牙和微信蓝牙权限"
-        });
-
-        wx.showModal({
-          title: "蓝牙初始化失败",
-          content: "请确认手机蓝牙已打开，并且微信有蓝牙/附近设备权限。",
-          showCancel: false
+          connected: false,
+          status: "手机蓝牙未开启或微信无蓝牙权限，打开后会自动重试"
         });
       }
     });
   },
 
+  /**
+   * 开始搜索 BLE 设备
+   * 这里设置 allowDuplicatesKey: true，
+   * 这样 ESP32 后面才开机时，也更容易被发现。
+   */
   startDiscovery() {
-    wx.startBluetoothDevicesDiscovery({
-      allowDuplicatesKey: false,
-      services: [],
+    if (this.data.connected || this._connecting) {
+      return;
+    }
 
-      success: () => {
-        console.log("开始搜索蓝牙设备");
+    wx.getBluetoothAdapterState({
+      success: (res) => {
+        if (!res.available) {
+          this._isDiscovering = false;
 
-        this.setData({
-          status: "正在搜索 ESP32_LOCK_001..."
+          this.setData({
+            status: "手机蓝牙未开启，请打开后等待自动连接"
+          });
+
+          return;
+        }
+
+        if (res.discovering) {
+          this._isDiscovering = true;
+
+          this.setData({
+            status: "正在持续搜索 ESP32_LOCK_001..."
+          });
+
+          return;
+        }
+
+        wx.startBluetoothDevicesDiscovery({
+          allowDuplicatesKey: true,
+          services: [],
+
+          success: () => {
+            this._isDiscovering = true;
+
+            console.log("开始搜索蓝牙设备");
+
+            this.setData({
+              status: "正在持续搜索 ESP32_LOCK_001..."
+            });
+          },
+
+          fail: (err) => {
+            console.error("搜索蓝牙失败：", err);
+
+            this._isDiscovering = false;
+
+            this.setData({
+              status: "搜索失败，正在自动重试..."
+            });
+          }
         });
       },
 
       fail: (err) => {
-        console.error("搜索失败", err);
+        console.error("获取蓝牙适配器状态失败：", err);
+
+        this._isDiscovering = false;
 
         this.setData({
-          status: "搜索蓝牙设备失败"
+          status: "蓝牙状态异常，正在自动重试..."
         });
       }
     });
   },
 
-  listenDeviceFound() {
+  /**
+   * 绑定蓝牙事件，只在 onLoad 里调用一次
+   */
+  bindBluetoothEvents() {
+    wx.onBluetoothAdapterStateChange((res) => {
+      console.log("手机蓝牙状态变化：", res);
+
+      if (!res.available) {
+        this._isDiscovering = false;
+        this._connecting = false;
+
+        this.setData({
+          connected: false,
+          deviceId: "",
+          serviceId: "",
+          writeCharId: "",
+          status: "手机蓝牙已关闭，请打开蓝牙，打开后会自动连接"
+        });
+
+        return;
+      }
+
+      this.setData({
+        status: "检测到手机蓝牙已开启，正在自动连接..."
+      });
+
+      this.tryConnectOnce();
+    });
+
     wx.onBluetoothDeviceFound((res) => {
       const devices = res.devices || [];
 
@@ -147,27 +292,58 @@ Page({
 
         console.log("发现设备：", name, device.deviceId);
 
-        if (name.startsWith(DEVICE_NAME_PREFIX)) {
-          console.log("匹配到目标设备：", name);
+        if (!name) {
+          continue;
+        }
 
-          wx.stopBluetoothDevicesDiscovery();
+        if (name.startsWith(DEVICE_NAME_PREFIX)) {
+          if (this.data.connected || this._connecting) {
+            return;
+          }
+
+          console.log("发现目标 ESP32：", name, device.deviceId);
+
+          this._connecting = true;
 
           this.setData({
-            status: "找到设备：" + name
+            status: "发现设备：" + name + "，正在连接..."
           });
 
-          this.connectDevice(device.deviceId);
-          break;
+          wx.stopBluetoothDevicesDiscovery({
+            complete: () => {
+              this._isDiscovering = false;
+              this.connectDevice(device.deviceId);
+            }
+          });
+
+          return;
         }
+      }
+    });
+
+    wx.onBLEConnectionStateChange((res) => {
+      console.log("BLE 连接状态变化：", res);
+
+      if (!res.connected) {
+        this._connecting = false;
+        this._isDiscovering = false;
+
+        this.setData({
+          connected: false,
+          deviceId: "",
+          serviceId: "",
+          writeCharId: "",
+          status: "蓝牙已断开，正在重新连接..."
+        });
+
+        setTimeout(() => {
+          this.tryConnectOnce();
+        }, 1000);
       }
     });
   },
 
   connectDevice(deviceId) {
-    this.setData({
-      status: "正在连接 ESP32..."
-    });
-
     wx.createBLEConnection({
       deviceId,
 
@@ -176,7 +352,7 @@ Page({
 
         this.setData({
           deviceId,
-          status: "连接成功，正在获取服务..."
+          status: "BLE 已连接，正在获取服务..."
         });
 
         setTimeout(() => {
@@ -185,11 +361,19 @@ Page({
       },
 
       fail: (err) => {
-        console.error("连接失败", err);
+        console.error("BLE 连接失败：", err);
+
+        this._connecting = false;
 
         this.setData({
-          status: "连接失败，请靠近 ESP32 后重试"
+          connected: false,
+          deviceId: "",
+          status: "连接失败，正在继续搜索..."
         });
+
+        setTimeout(() => {
+          this.tryConnectOnce();
+        }, 1000);
       }
     });
   },
@@ -206,9 +390,7 @@ Page({
         });
 
         if (!targetService) {
-          this.setData({
-            status: "未找到目标服务 FFF0"
-          });
+          this.closeCurrentConnectionAndRetry("未找到目标服务 FFF0，正在重试...");
           return;
         }
 
@@ -221,11 +403,8 @@ Page({
       },
 
       fail: (err) => {
-        console.error("获取服务失败", err);
-
-        this.setData({
-          status: "获取服务失败"
-        });
+        console.error("获取服务失败：", err);
+        this.closeCurrentConnectionAndRetry("获取服务失败，正在重试...");
       }
     });
   },
@@ -243,18 +422,16 @@ Page({
         });
 
         if (!targetChar) {
-          this.setData({
-            status: "未找到写特征值 FFF1"
-          });
+          this.closeCurrentConnectionAndRetry("未找到写特征值 FFF1，正在重试...");
           return;
         }
 
         if (!targetChar.properties.write && !targetChar.properties.writeNoResponse) {
-          this.setData({
-            status: "目标特征值不支持写入"
-          });
+          this.closeCurrentConnectionAndRetry("目标特征值不支持写入，正在重试...");
           return;
         }
+
+        this._connecting = false;
 
         this.setData({
           writeCharId: targetChar.uuid,
@@ -269,13 +446,41 @@ Page({
       },
 
       fail: (err) => {
-        console.error("获取特征值失败", err);
-
-        this.setData({
-          status: "获取特征值失败"
-        });
+        console.error("获取特征值失败：", err);
+        this.closeCurrentConnectionAndRetry("获取特征值失败，正在重试...");
       }
     });
+  },
+
+  closeCurrentConnectionAndRetry(msg) {
+    console.warn(msg);
+
+    const deviceId = this.data.deviceId;
+
+    this._connecting = false;
+    this._isDiscovering = false;
+
+    this.setData({
+      connected: false,
+      serviceId: "",
+      writeCharId: "",
+      status: msg
+    });
+
+    if (deviceId) {
+      wx.closeBLEConnection({
+        deviceId,
+        complete: () => {
+          setTimeout(() => {
+            this.tryConnectOnce();
+          }, 1000);
+        }
+      });
+    } else {
+      setTimeout(() => {
+        this.tryConnectOnce();
+      }, 1000);
+    }
   },
 
   sendCommand(cmd) {
@@ -307,7 +512,7 @@ Page({
       },
 
       fail: (err) => {
-        console.error("发送失败", err);
+        console.error("发送失败：", err);
 
         wx.showToast({
           title: "发送失败",
@@ -315,21 +520,11 @@ Page({
         });
 
         this.setData({
-          status: "发送失败"
-        });
-      }
-    });
-  },
-
-  listenConnectionState() {
-    wx.onBLEConnectionStateChange((res) => {
-      console.log("连接状态变化：", res);
-
-      if (!res.connected) {
-        this.setData({
           connected: false,
-          status: "蓝牙已断开"
+          status: "发送失败，正在重新连接..."
         });
+
+        this.closeCurrentConnectionAndRetry("发送失败，正在重新连接...");
       }
     });
   },
@@ -341,7 +536,17 @@ Page({
       });
     }
 
-    wx.closeBluetoothAdapter();
+    wx.stopBluetoothDevicesDiscovery({
+      complete: () => {
+        this._isDiscovering = false;
+      }
+    });
+
+    wx.closeBluetoothAdapter({
+      complete: () => {
+        this._bluetoothOpened = false;
+      }
+    });
   },
 
   stringToArrayBuffer(str) {

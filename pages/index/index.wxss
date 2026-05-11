@@ -1,19 +1,67 @@
 .page {
+  position: relative;
+  min-height: 100vh;
   padding: 40rpx;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 背景图片层 */
+.bg-img {
+  position: absolute;
+  left: 0;
+  top: 0;
+
+  width: 100%;
+  height: 100%;
+
+  z-index: 0;
+}
+
+/* 黑色半透明遮罩层 */
+.bg-mask {
+  position: absolute;
+  left: 0;
+  top: 0;
+
+  width: 100%;
+  height: 100%;
+
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* 中间面板 */
+.panel {
+  position: relative;
+  z-index: 2;
+
+  width: 100%;
+  max-width: 650rpx;
+  padding: 36rpx 28rpx 40rpx;
+  box-sizing: border-box;
+
+  background: rgba(255, 255, 255, 0.86);
+  border-radius: 28rpx;
 }
 
 .title {
   font-size: 44rpx;
   font-weight: bold;
   text-align: center;
-  margin-bottom: 30rpx;
+  margin-bottom: 24rpx;
 }
 
 .status {
   text-align: center;
   color: #666;
-  margin-bottom: 30rpx;
+  margin-bottom: 24rpx;
   min-height: 40rpx;
+  font-size: 26rpx;
 }
 
 .password-box {
@@ -24,6 +72,7 @@
   border: 2rpx solid #ddd;
   border-radius: 20rpx;
   margin-bottom: 40rpx;
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .keyboard {
@@ -36,12 +85,13 @@
   height: 100rpx;
   font-size: 36rpx;
   border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .delete {
-  background-color: #f5d6d6;
+  background-color: rgba(245, 214, 214, 0.96);
 }
 
 .confirm {
-  background-color: #b8e6c1;
+  background-color: rgba(184, 230, 193, 0.96);
 }

@@ -1,21 +1,30 @@
 <view class="page">
-  <view class="title">请输入密码</view>
+  <!-- 背景图 -->
+  <image class="bg-img" src="/images/efalcon_bg.jpg" mode="aspectFill"></image>
 
-  <view class="status">{{status}}</view>
+  <!-- 背景遮罩，让按键更清楚 -->
+  <view class="bg-mask"></view>
 
-  <view class="password-box">
-    {{maskedPassword}}
-  </view>
+  <!-- 中间操作面板 -->
+  <view class="panel">
+    <view class="title">请输入密码</view>
 
-  <view class="keyboard">
-    <block wx:for="{{keys}}" wx:key="index">
-      <button class="key" bindtap="onKeyTap" data-key="{{item}}">
-        {{item}}
-      </button>
-    </block>
+    <view class="status">{{status}}</view>
 
-    <button class="key delete" bindtap="onDelete">Delete</button>
-    <button class="key" bindtap="onKeyTap" data-key="0">0</button>
-    <button class="key confirm" bindtap="onConfirm">确认</button>
+    <view class="password-box">
+      {{maskedPassword}}
+    </view>
+
+    <view class="keyboard">
+      <block wx:for="{{keys}}" wx:key="index">
+        <button class="key" bindtap="onKeyTap" data-key="{{item}}">
+          {{item}}
+        </button>
+      </block>
+
+      <button class="key delete" bindtap="onDelete">Delete</button>
+      <button class="key" bindtap="onKeyTap" data-key="0">0</button>
+      <button class="key confirm" bindtap="onConfirm">确认</button>
+    </view>
   </view>
 </view>
